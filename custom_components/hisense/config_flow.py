@@ -3,6 +3,7 @@ from homeassistant import config_entries, core
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
+from .protocol import SsdpDiscovery
 from .const import (
     DOMAIN,
     CONF_USERNAME,
@@ -126,6 +127,24 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             errors=errors,
         )
+
+    async def async_step_discovery(self, user_input=None):
+        """Scan LAN for Hisense TVs."""
+        if user_input is None:
+            discovery = SsdpDiscovery()
+            found = await discovery.discover()
+            self._discovered_tvs = {tv.host: f"{tv.name} ({tv.host})" for tv in found}
+            
+            schema = vol.Schema({
+                vol.Optional("tv_ip"): str,
+                vol.Optional("discovered_tv"): vol.In(self._discovered_tvs),
+            })
+            return self.async_show_form(step_id="discovery", data_schema=schema)
+        
+        # 处理用户选择
+        ip = user_input.get("tv_ip") or user_input.get("discovered_tv")
+        # 这里后续需要将其存入配置中，供 HiSenseTV 初始化使用
+        return self.async_create_entry(title="TV Local Control", data={"tv_ip": ip})
 
     async def async_step_device(self, user_input=None):
         errors = {}
