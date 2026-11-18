@@ -41,6 +41,14 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._reauth_username = ""
 
     async def async_step_user(self, user_input=None):
+        """Step 1: Choose mode."""
+        return self.async_show_menu(
+            step_id="user",
+            menu_options=["login", "lan_tv"],
+        )
+
+    async def async_step_login(self, user_input=None):
+        """Step 2: Login via Cloud."""
         errors = {}
 
         if user_input is not None:
@@ -80,7 +88,7 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             return await self.async_step_home()
 
         return self.async_show_form(
-            step_id="user",
+            step_id="login",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_USERNAME): str,
@@ -128,8 +136,8 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_discovery(self, user_input=None):
-        """Scan LAN for Hisense TVs."""
+    async def async_step_lan_tv(self, user_input=None):
+        """Step 2: Add Local TV."""
         if user_input is None:
             discovery = SsdpDiscovery()
             found = await discovery.discover()
@@ -139,12 +147,11 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional("tv_ip"): str,
                 vol.Optional("discovered_tv"): vol.In(self._discovered_tvs),
             })
-            return self.async_show_form(step_id="discovery", data_schema=schema)
+            return self.async_show_form(step_id="lan_tv", data_schema=schema)
         
         # 处理用户选择
         ip = user_input.get("tv_ip") or user_input.get("discovered_tv")
-        # 这里后续需要将其存入配置中，供 HiSenseTV 初始化使用
-        return self.async_create_entry(title="TV Local Control", data={"tv_ip": ip})
+        return self.async_create_entry(title="TV Local Control", data={"tv_ip": ip, "device_type": "电视"})
 
     async def async_step_device(self, user_input=None):
         errors = {}
