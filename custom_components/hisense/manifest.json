@@ -4,7 +4,7 @@
   "config_flow": true,
   "version": "1.8.0",
   "integration_type": "device",
-  "documentation": "https://github.com/manymuch/HisenseHA",
+  "documentation": "https://github.com/kanshurichard/HisenseHA",
   "requirements": [
     "paho-mqtt>=1.6.1"
   ],

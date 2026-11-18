@@ -8,7 +8,7 @@ Home Assistant custom integration for **Hisense** smart devices. It uses cloud A
 
 ## Requirements
 
-- **Home Assistant** 2025.6 or newer (for older cores, see [releases](https://github.com/manymuch/HisenseHA/releases)).
+- **Home Assistant** 2025.6 or newer (for older cores, see [releases](https://github.com/kanshurichard/HisenseHA/releases)).
 - A **Hisense account** that can sign in to the official mobile app (same username and password).
 - The AC, refrigerator, or supported washer/dryer must already be paired in the app and belong to a **home**.
 
@@ -16,19 +16,19 @@ Home Assistant custom integration for **Hisense** smart devices. It uses cloud A
 
 ### Option A: HACS
 
-[![Open your Home Assistant instance and add this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=manymuch&repository=HisenseHA&category=integration)
+[![Open your Home Assistant instance and add this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=kanshurichard&repository=HisenseHA&category=integration)
 
 Click the button above, or manually:
 
 1. Open **HACS** in Home Assistant.
 2. Go to **Integrations** → menu (⋮) → **Custom repositories**.
-3. Add repository `https://github.com/manymuch/HisenseHA`, category **Integration**.
+3. Add repository `https://github.com/kanshurichard/HisenseHA`, category **Integration**.
 4. On the **Hisense Smart Devices** card, click **Download**.
 5. **Restart** Home Assistant when prompted.
 
 ### Option B: Manual install
 
-1. Download a release archive from [Releases](https://github.com/manymuch/HisenseHA/releases), extract it, and copy the contents into your Home Assistant configuration directory:
+1. Download a release archive from [Releases](https://github.com/kanshurichard/HisenseHA/releases), extract it, and copy the contents into your Home Assistant configuration directory:
 
    `config/custom_components/hisense/`
 

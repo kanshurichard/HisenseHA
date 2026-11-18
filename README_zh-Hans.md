@@ -10,7 +10,7 @@
 
 ## 环境要求
 
-- **Home Assistant** 2025.6 或更高版本（若使用更旧的核心，请查看[发行说明](https://github.com/manymuch/HisenseHA/releases)）。
+- **Home Assistant** 2025.6 或更高版本（若使用更旧的核心，请查看[发行说明](https://github.com/kanshurichard/HisenseHA/releases)）。
 - 能在官方手机 **海信爱家 App** 中正常登录的海信账号（用户名与密码一致）。
 - 空调、冰箱、受支持的洗衣机或干衣机需已在 App 中完成配网，并归属到某个 **家庭**。
 
@@ -18,19 +18,19 @@
 
 ### 方式一：HACS
 
-[![Open your Home Assistant instance and add this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=manymuch&repository=HisenseHA&category=integration)
+[![Open your Home Assistant instance and add this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=kanshurichard&repository=HisenseHA&category=integration)
 
 点上面的按钮一键添加，或者手动操作：
 
 1. 在 Home Assistant 中打开 **HACS**。
 2. 进入 **集成** → 右上角菜单（⋮）→ **自定义仓库**。
-3. 添加仓库 `https://github.com/manymuch/HisenseHA`，类别选 **集成（Integration）**。
+3. 添加仓库 `https://github.com/kanshurichard/HisenseHA`，类别选 **集成（Integration）**。
 4. 在 **Hisense Smart Devices** 卡片中点击 **下载**。
 5. 按提示 **重启** Home Assistant。
 
 ### 方式二：手动安装
 
-1. 将 Release 中的文件解压后复制到 Home Assistant 配置目录下：
+1. 从 [Releases 发行页面](https://github.com/kanshurichard/HisenseHA/releases) 下载最新发行版压缩包，解压后将 `custom_components/hisense/` 复制到 Home Assistant 配置目录下：
 
    `config/custom_components/hisense/`
 
