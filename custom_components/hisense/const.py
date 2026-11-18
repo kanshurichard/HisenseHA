@@ -16,6 +16,12 @@ MIN_WASHER_POLL_INTERVAL = 5  # minutes (强制不得小于5分钟以防封号)
 CONF_ENABLE_PERIODIC_POLL = "enable_periodic_poll"
 DEFAULT_ENABLE_PERIODIC_POLL = False  # 默认关闭以防封号，依赖 MQTT 实时推送
 
+# Options keys for TV local control
+CONF_TV_CONTROL_MODE = "tv_control_mode"
+DEFAULT_TV_CONTROL_MODE = "local" # 本地优先
+CONTROL_MODE_LOCAL = "local"
+CONTROL_MODE_CLOUD = "cloud"
+
 
 def climate_limits_signal(device_id: str) -> str:
     """Dispatcher signal when per-device climate min/max limits change."""

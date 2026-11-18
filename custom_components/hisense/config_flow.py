@@ -14,6 +14,10 @@ from .const import (
     MIN_WASHER_POLL_INTERVAL,
     CONF_ENABLE_PERIODIC_POLL,
     DEFAULT_ENABLE_PERIODIC_POLL,
+    CONF_TV_CONTROL_MODE,
+    DEFAULT_TV_CONTROL_MODE,
+    CONTROL_MODE_LOCAL,
+    CONTROL_MODE_CLOUD,
 )
 from .pyhisenseapi import HiSenseLogin
 
@@ -280,6 +284,10 @@ class HisenseOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_ENABLE_PERIODIC_POLL,
                     default=options.get(CONF_ENABLE_PERIODIC_POLL, DEFAULT_ENABLE_PERIODIC_POLL),
                 ): bool,
+                vol.Required(
+                    CONF_TV_CONTROL_MODE,
+                    default=options.get(CONF_TV_CONTROL_MODE, DEFAULT_TV_CONTROL_MODE),
+                ): vol.In({CONTROL_MODE_LOCAL: "Local First (Recommended)", CONTROL_MODE_CLOUD: "Cloud Only"}),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
