@@ -45,6 +45,10 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_menu(
             step_id="user",
             menu_options=["login", "lan_tv"],
+            description_placeholders={
+                "menu_login": "登录海信账号 (空调/冰箱等)",
+                "menu_lan_tv": "扫描局域网海信电视 (电视直连)",
+            },
         )
 
     async def async_step_login(self, user_input=None):
@@ -98,8 +102,8 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             description_placeholders={
-                "username_hint": "app login username",
-                "password_hint": "app login password",
+                "username_hint": "使用海信爱家 App 账号登录",
+                "password_hint": "对应密码",
             },
             errors=errors,
         )
@@ -141,17 +145,23 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is None:
             discovery = SsdpDiscovery()
             found = await discovery.discover()
-            self._discovered_tvs = {tv.host: f"{tv.name} ({tv.host})" for tv in found}
+            self._discovered_tvs = {
+                tv.host: f"{tv.name} ({tv.host})" 
+                for tv in found 
+                if "Hisense" in tv.name or "HiSmart" in tv.model
+            }
             
             schema = vol.Schema({
-                vol.Optional("tv_ip"): str,
                 vol.Optional("discovered_tv"): vol.In(self._discovered_tvs),
+                vol.Optional("tv_ip"): str,
             })
-            return self.async_show_form(step_id="lan_tv", data_schema=schema)
+            return self.async_show_form(step_id="lan_tv", data_schema=schema, description_placeholders={
+                "desc": "请选择发现的海信电视，或直接输入电视 IP 地址。仅支持开启了 DLNA 服务的海信智能电视。"
+            })
         
         # 处理用户选择
         ip = user_input.get("tv_ip") or user_input.get("discovered_tv")
-        return self.async_create_entry(title="TV Local Control", data={"tv_ip": ip, "device_type": "电视"})
+        return self.async_create_entry(title=f"Hisense TV ({ip})", data={"tv_ip": ip, "device_type": "电视"})
 
     async def async_step_device(self, user_input=None):
         errors = {}
