@@ -2375,6 +2375,7 @@ class HiSenseTV(_HiSenseDevice):
     """Hisense AIHome TV client."""
 
     def __init__(self, *args, **kwargs):
+        self.options = kwargs.pop("options", {})
         super().__init__(*args, **kwargs)
         self.status = {
             "online": True,
@@ -2384,60 +2385,49 @@ class HiSenseTV(_HiSenseDevice):
             "source": "TV",
             "last_key": None,
         }
+        self.ip = kwargs.get("ip")
 
-    def _update_from_states(self, states: dict):
-        """Parse named states reported by Hisense TV."""
-        updates = {}
-        if "onlineStatus" in states:
-            updates["online"] = _as_bool(states["onlineStatus"])
-        if "powerStatus" in states or "power" in states:
-            updates["power_on"] = _as_bool(states.get("powerStatus", states.get("power")))
-        if "volume" in states:
-            vol = _as_int(states.get("volume"))
-            if vol is not None:
-                updates["volume"] = vol
-        if "mute" in states or "isMute" in states:
-            updates["is_volume_muted"] = _as_bool(states.get("mute", states.get("isMute")))
-        if "source" in states or "input" in states:
-            updates["source"] = str(states.get("source", states.get("input")))
-        if "lastKey" in states:
-            updates["last_key"] = str(states.get("lastKey"))
-        self.status.update(updates)
-        return set(updates)
-
-    async def _control(self, command, params, *, source_name=None):
-        return await self._send_aihome_action(command, params, source_name=source_name)
-
-    async def turn_on(self):
-        ok = await self._control(
-            "connector.device.command.Power",
-            {"onAndOff": {"code": "On"}},
-            source_name=self.POWER_SOURCE_NAME,
-        )
-        if not ok:
-            ok = await self.send_key("KEY_POWER")
-        if ok:
-            self._set_pending_status({"power_on": True})
-        return ok
-
-    async def turn_off(self):
-        ok = await self._control(
-            "connector.device.command.Power",
-            {"onAndOff": {"code": "Off"}},
-            source_name=self.POWER_SOURCE_NAME,
-        )
-        if not ok:
-            ok = await self.send_key("KEY_POWER")
-        if ok:
-            self._set_pending_status({"power_on": False})
-        return ok
+    async def _send_local_key(self, key: str):
+        """通过本地 LAN 端口 7778/7779 发送按键，直接控制电视。"""
+        if not self.ip:
+            return False
+            
+        for port in [7778, 7779]:
+            try:
+                # 本地控制协议：POST /KEY..controller，body 忽略
+                url = f"http://{self.ip}:{port}/{key}..controller"
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+                    async with session.post(url, json={}) as resp:
+                        if resp.status == 200:
+                            return True
+            except Exception:
+                pass
+        return False
 
     async def send_key(self, key: str):
-        ok = await self._send_aihome_action(
-            "connector.device.command.PressKeyEvent",
-            {"key": key},
-        )
+        mode = self.options.get("tv_control_mode", "local")
+        ok = False
+        
+        if mode == "local":
+            # 1. 优先执行本地 HTTP 发送
+            ok = await self._send_local_key(key)
+            # 2. 本地失败，降级到云端
+            if not ok:
+                ok = await self._send_aihome_action(
+                    "connector.device.command.PressKeyEvent",
+                    {"key": key},
+                )
+        else:
+            # 云端优先模式
+            ok = await self._send_aihome_action(
+                "connector.device.command.PressKeyEvent",
+                {"key": key},
+            )
+            if not ok:
+                ok = await self._send_local_key(key)
+                
         if not ok:
+            # 降级到原有的 mobile-aiot 云端 fallback
             try:
                 result = await self._post(
                     self.session, self.access_token, self.customer_id,
@@ -2449,6 +2439,7 @@ class HiSenseTV(_HiSenseDevice):
                 pass
         if ok:
             self._set_pending_status({"last_key": key})
+        return ok
         return ok
 
     async def volume_up(self):
