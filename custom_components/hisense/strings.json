@@ -2,11 +2,27 @@
   "config": {
     "step": {
       "user": {
-        "title": "HiSense Smart Device",
-        "description": "Sign in with your Hisense AIHome username and password (recommended: use a shared family sub-account to prevent MQTT session collisions with the mobile app)",
+        "title": "Add Hisense Device",
+        "description": "Choose how to add your Hisense device: Add a TV via local network for direct control without login, or sign in to your Hisense AIHome account for all appliances.",
+        "menu_options": {
+          "lan_tv": "Add Hisense TV via LAN (Local Direct Control, No Login)",
+          "login": "Sign in with Hisense AIHome Account (AC/Fridge/Washer/TV)"
+        }
+      },
+      "lan_tv": {
+        "title": "Add Local Hisense TV",
+        "description": "Auto scan found Hisense TV(s) on your LAN. Pick one from the list or enter the TV's IP address manually.",
         "data": {
-          "username": "App login username, could be the phone number",
-          "password": "App login password, if not available set it in the app first"
+          "discovered_tv": "Discovered TV",
+          "tv_ip": "TV IP Address (e.g. 192.168.1.100)"
+        }
+      },
+      "login": {
+        "title": "Sign in to Hisense AIHome",
+        "description": "Sign in with your Hisense AIHome username and password (recommended: use a shared family sub-account to prevent MQTT session collisions with the mobile app).",
+        "data": {
+          "username": "AIHome username (phone number)",
+          "password": "App login password"
         }
       },
       "home": {
@@ -27,8 +43,10 @@
       }
     },
     "error": {
-      "cannot_connect": "Unable to connect to the device",
-      "invalid_auth": "Failed to login",
+      "cannot_connect": "Unable to connect to the device. Ensure it is powered on and on the same network.",
+      "invalid_ip": "Invalid IP address format. Please enter a valid IPv4 address.",
+      "already_configured": "This device is already configured in Home Assistant.",
+      "invalid_auth": "Failed to login. Please check username and password.",
       "no_devices": "No supported Hisense devices were found",
       "no_homes": "No homes were found for this account",
       "wrong_account": "This account does not contain the configured devices",
@@ -40,11 +58,12 @@
     "step": {
       "init": {
         "title": "Hisense Appliance Settings",
-        "description": "Configure cloud polling options. To prevent account bans from excessive requests, standby is strictly zero-polling, wash-time dynamic polling is enforced to be at least 5 minutes, and 60s periodic compensation for water heater/fridge is disabled by default (relying on real-time MQTT push).",
+        "description": "Configure appliance polling and TV control strategy.",
         "data": {
           "enable_washer_dynamic_poll": "Enable dynamic cloud polling during washing (default disabled, pure local countdown & MQTT)",
           "washer_poll_interval": "Dynamic polling interval while washing (minutes, minimum 5 minutes)",
-          "enable_periodic_poll": "Enable 60s periodic polling compensation for water heater / fridge (default disabled to prevent bans)"
+          "enable_periodic_poll": "Enable 60s periodic polling compensation for water heater / fridge (default disabled to prevent bans)",
+          "tv_control_mode": "TV Control Mode (Local First for fast response; Cloud Only relies on cloud server)"
         }
       }
     },

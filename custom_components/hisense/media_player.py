@@ -44,6 +44,9 @@ class HisenseTVMediaPlayer(HisenseEntity, MediaPlayerEntity):
         | MediaPlayerEntityFeature.TURN_OFF
         | MediaPlayerEntityFeature.VOLUME_STEP
         | MediaPlayerEntityFeature.VOLUME_MUTE
+        | MediaPlayerEntityFeature.PLAY
+        | MediaPlayerEntityFeature.PAUSE
+        | MediaPlayerEntityFeature.STOP
     )
 
     def __init__(self, coordinator) -> None:
@@ -104,6 +107,21 @@ class HisenseTVMediaPlayer(HisenseEntity, MediaPlayerEntity):
             self.coordinator.async_update_from_client()
             return
         raise HomeAssistantError("Failed to decrease Hisense TV volume")
+
+    async def async_media_play(self) -> None:
+        """Play media."""
+        await self.client.send_key("KEY_OK")
+        self.coordinator.async_update_from_client()
+
+    async def async_media_pause(self) -> None:
+        """Pause media."""
+        await self.client.send_key("KEY_OK")
+        self.coordinator.async_update_from_client()
+
+    async def async_media_stop(self) -> None:
+        """Stop media."""
+        await self.client.send_key("KEY_RETURNS")
+        self.coordinator.async_update_from_client()
 
     async def async_mute_volume(self, mute: bool) -> None:
         """Mute (true) or unmute (false) media player."""

@@ -44,6 +44,55 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {}
     session = async_get_clientsession(hass)
+
+    # ── 局域网直连电视独立模式（无需海信云账号登录） ──────────────────
+    if entry.data.get("entry_type") == "lan_tv" or "tv_ip" in entry.data or "host" in entry.data:
+        host = entry.data.get("tv_ip") or entry.data.get("host")
+        name = entry.title or f"海信电视 ({host})"
+        udn = entry.data.get("udn")
+        device_id = udn if udn else f"tv_{host.replace('.', '_')}"
+
+        client = HiSenseTV(
+            wifi_id=f"lan_{host}",
+            device_id=device_id,
+            refresh_token="",
+            session=session,
+            device_name=name,
+            entity_name=name,
+            home_id="",
+            access_token="",
+            customer_id="",
+            partner_id="",
+            username="",
+            password="",
+            options=entry.options,
+            ip=host,
+        )
+        coordinator = HisenseDataUpdateCoordinator(
+            hass,
+            client,
+            device_type="电视",
+            entry=entry,
+        )
+        hass.data[DOMAIN][entry.entry_id][device_id] = coordinator
+
+        # 首次本地状态刷新（探测电视是否在线/开机）
+        try:
+            await coordinator.async_config_entry_first_refresh()
+        except Exception as e:
+            _LOGGER.debug("Hisense LAN TV first refresh note: %s", e)
+
+        platforms = [
+            "media_player",
+            "remote",
+            "button",
+            "sensor",
+        ]
+        await hass.config_entries.async_forward_entry_setups(entry, platforms)
+        entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+        return True
+
+    # ── 云端爱家多设备模式 ──────────────────────────────────────────
     clients = []
     coordinators = []
     token_lock = asyncio.Lock()
@@ -165,6 +214,8 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
                 password=password,
                 on_token_refresh=save_tokens,
                 token_lock=token_lock,
+                options=entry.options,
+                ip=device_info.get("ip") or entry.options.get("tv_ip"),
             )
         elif device_type == "烤箱":
             client = HiSenseOven(
@@ -743,6 +794,7 @@ async def async_setup_entry(hass: core.HomeAssistant, entry: config_entries.Conf
         "binary_sensor",
         "select",
         "media_player",
+        "remote",
         "water_heater",
     ]
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
@@ -765,6 +817,7 @@ async def async_unload_entry(hass: core.HomeAssistant, entry: config_entries.Con
         "binary_sensor",
         "select",
         "media_player",
+        "remote",
         "water_heater",
     ]
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)

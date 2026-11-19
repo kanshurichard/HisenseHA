@@ -44,11 +44,79 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Step 1: Choose mode."""
         return self.async_show_menu(
             step_id="user",
-            menu_options=["login", "lan_tv"],
-            description_placeholders={
-                "menu_login": "登录海信账号 (空调/冰箱等)",
-                "menu_lan_tv": "扫描局域网海信电视 (电视直连)",
-            },
+            menu_options=["lan_tv", "login"],
+        )
+
+    async def async_step_lan_tv(self, user_input=None):
+        """Step 2: Add Local TV without cloud account."""
+        errors = {}
+
+        if user_input is not None:
+            host = (user_input.get("tv_ip") or user_input.get("discovered_tv") or "").strip()
+            if not host:
+                errors["base"] = "invalid_ip"
+            else:
+                import ipaddress
+                try:
+                    ipaddress.IPv4Address(host)
+                except ValueError:
+                    errors["base"] = "invalid_ip"
+
+            if not errors:
+                from .protocol import DlnaClient
+                client = DlnaClient(host, session=async_get_clientsession(self.hass))
+                connected = await client.test_connect(timeout=2.5)
+                if not connected:
+                    errors["base"] = "cannot_connect"
+                else:
+                    udn = f"hisense_tv_{host}"
+                    name = f"海信电视 ({host})"
+                    try:
+                        info = await client.connect()
+                        if info.get("udn"):
+                            udn = info["udn"]
+                        if info.get("name"):
+                            name = info["name"]
+                    except Exception:
+                        pass
+
+                    await self.async_set_unique_id(udn)
+                    self._abort_if_unique_id_configured()
+
+                    return self.async_create_entry(
+                        title=name,
+                        data={
+                            "entry_type": "lan_tv",
+                            "tv_ip": host,
+                            "host": host,
+                            "port": 38400,
+                            "udn": udn,
+                            "device_type": "电视",
+                        },
+                    )
+
+        # 扫描局域网电视
+        discovery = SsdpDiscovery(timeout=3.0)
+        found = await discovery.discover()
+        self._discovered_tvs = {
+            tv.host: f"{tv.name or '海信电视'} ({tv.host})"
+            for tv in found
+        }
+
+        if self._discovered_tvs:
+            schema = vol.Schema({
+                vol.Optional("discovered_tv", default=list(self._discovered_tvs.keys())[0]): vol.In(self._discovered_tvs),
+                vol.Optional("tv_ip"): str,
+            })
+        else:
+            schema = vol.Schema({
+                vol.Required("tv_ip"): str,
+            })
+
+        return self.async_show_form(
+            step_id="lan_tv",
+            data_schema=schema,
+            errors=errors,
         )
 
     async def async_step_login(self, user_input=None):
@@ -139,29 +207,6 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             errors=errors,
         )
-
-    async def async_step_lan_tv(self, user_input=None):
-        """Step 2: Add Local TV."""
-        if user_input is None:
-            discovery = SsdpDiscovery()
-            found = await discovery.discover()
-            self._discovered_tvs = {
-                tv.host: f"{tv.name} ({tv.host})" 
-                for tv in found 
-                if "Hisense" in tv.name or "HiSmart" in tv.model
-            }
-            
-            schema = vol.Schema({
-                vol.Optional("discovered_tv"): vol.In(self._discovered_tvs),
-                vol.Optional("tv_ip"): str,
-            })
-            return self.async_show_form(step_id="lan_tv", data_schema=schema, description_placeholders={
-                "desc": "请选择发现的海信电视，或直接输入电视 IP 地址。仅支持开启了 DLNA 服务的海信智能电视。"
-            })
-        
-        # 处理用户选择
-        ip = user_input.get("tv_ip") or user_input.get("discovered_tv")
-        return self.async_create_entry(title=f"Hisense TV ({ip})", data={"tv_ip": ip, "device_type": "电视"})
 
     async def async_step_device(self, user_input=None):
         errors = {}
@@ -296,18 +341,29 @@ class HisenseOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         errors = {}
+        entry = self._entry
+        is_lan_tv = (entry.data.get("entry_type") == "lan_tv" or "tv_ip" in entry.data) if entry else False
+
         if user_input is not None:
-            # 强制设定轮询间隔不得小于5分钟
-            interval = user_input.get(CONF_WASHER_POLL_INTERVAL, DEFAULT_WASHER_POLL_INTERVAL)
-            if interval < MIN_WASHER_POLL_INTERVAL:
-                errors[CONF_WASHER_POLL_INTERVAL] = "interval_too_low"
-            else:
+            if not is_lan_tv:
+                interval = user_input.get(CONF_WASHER_POLL_INTERVAL, DEFAULT_WASHER_POLL_INTERVAL)
+                if interval < MIN_WASHER_POLL_INTERVAL:
+                    errors[CONF_WASHER_POLL_INTERVAL] = "interval_too_low"
+            if not errors:
                 return self.async_create_entry(title="", data=user_input)
 
-        entry = self._entry
         options = entry.options if entry else {}
-        schema = vol.Schema(
-            {
+
+        if is_lan_tv:
+            schema = vol.Schema({
+                vol.Required(
+                    CONF_TV_CONTROL_MODE,
+                    default=options.get(CONF_TV_CONTROL_MODE, DEFAULT_TV_CONTROL_MODE),
+                ): vol.In({CONTROL_MODE_LOCAL: "本地优先 (Local First)", CONTROL_MODE_CLOUD: "仅云端 (Cloud Only)"}),
+            })
+        else:
+            has_tv = any(d.get("device_type") == "电视" for d in entry.data.get("devices", [])) if entry else False
+            fields = {
                 vol.Required(
                     CONF_ENABLE_WASHER_POLL,
                     default=options.get(CONF_ENABLE_WASHER_POLL, DEFAULT_ENABLE_WASHER_POLL),
@@ -320,11 +376,13 @@ class HisenseOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_ENABLE_PERIODIC_POLL,
                     default=options.get(CONF_ENABLE_PERIODIC_POLL, DEFAULT_ENABLE_PERIODIC_POLL),
                 ): bool,
-                vol.Required(
+            }
+            if has_tv:
+                fields[vol.Required(
                     CONF_TV_CONTROL_MODE,
                     default=options.get(CONF_TV_CONTROL_MODE, DEFAULT_TV_CONTROL_MODE),
-                ): vol.In({CONTROL_MODE_LOCAL: "Local First (Recommended)", CONTROL_MODE_CLOUD: "Cloud Only"}),
-            }
-        )
+                )] = vol.In({CONTROL_MODE_LOCAL: "本地优先 (Local First)", CONTROL_MODE_CLOUD: "仅云端 (Cloud Only)"})
+            schema = vol.Schema(fields)
+
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
 

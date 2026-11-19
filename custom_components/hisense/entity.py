@@ -35,8 +35,8 @@ class HisenseEntity(CoordinatorEntity[HisenseDataUpdateCoordinator]):
         """Initialize the entity."""
         super().__init__(coordinator)
         
-        device_id = coordinator.client.device_id
-        slugified_device_id = slugify(device_id)
+        device_id = getattr(coordinator.client, "device_id", None) or "hisense_device"
+        slugified_device_id = slugify(str(device_id))
         
         self._attr_unique_id = f"{unique_suffix}_{slugified_device_id}"
         self._attr_suggested_object_id = f"{object_suffix}_{slugified_device_id}"

@@ -79,11 +79,12 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             CONF_ENABLE_PERIODIC_POLL, DEFAULT_ENABLE_PERIODIC_POLL
         )
 
-        initial_interval = (
-            timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
-            if (enable_periodic_poll and device_type in ("冰箱", "酒柜", "热水器"))
-            else None
-        )
+        initial_interval = None
+        if enable_periodic_poll and device_type in ("冰箱", "酒柜", "热水器"):
+            initial_interval = timedelta(seconds=_FRIDGE_SCAN_INTERVAL)
+        elif device_type == "电视" and getattr(client, "ip", None) and not getattr(client, "access_token", None):
+            # 局域网电视每 15 秒探测一次本地端口在线状态
+            initial_interval = timedelta(seconds=15)
 
         super().__init__(
             hass,
@@ -91,6 +92,21 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             name=f"{DOMAIN}_{client.device_id}",
             update_interval=initial_interval,
         )
+
+    async def _check_local_tv_online(self, host: str, timeout: float = 1.0) -> bool:
+        """Check if local TV is online and responding on control ports."""
+        import socket
+        loop = asyncio.get_running_loop()
+        for port in (7778, 7779, 38400):
+            def _probe():
+                try:
+                    with socket.create_connection((host, port), timeout=timeout):
+                        return True
+                except (OSError, socket.timeout):
+                    return False
+            if await loop.run_in_executor(None, _probe):
+                return True
+        return False
 
     async def _read_status(self) -> dict[str, Any] | None:
         """Read device state, keeping optional energy data best effort."""
@@ -109,6 +125,14 @@ class HisenseDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch status and recover account access once if token expired."""
+        # 局域网电视专用轻量在线状态同步
+        if self.device_type == "电视" and getattr(self.client, "ip", None) and not getattr(self.client, "access_token", None):
+            is_online = await self._check_local_tv_online(self.client.ip)
+            status = self.client.get_status()
+            status["online"] = is_online
+            status["power_on"] = is_online
+            self.last_success_time = dt_util.utcnow()
+            return status
         request_token = self.client.access_token
         if request_token:
             try:

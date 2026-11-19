@@ -167,20 +167,20 @@ class SsdpDiscovery:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         except (AttributeError, OSError):
             pass
-        s.bind(("", 1900))
 
-        # Bind multicast to the chosen interface
-        mreq = socket.inet_aton("239.255.255.250")
-        mreq += socket.inet_aton(self.iface or "0.0.0.0")
         try:
+            s.bind(("", 1900))
+        except OSError:
+            # Port 1900 may be in use by HA core SSDP; bind to ephemeral port for M-SEARCH
+            s.bind(("", 0))
+
+        # Bind multicast to the chosen interface if bound to 1900
+        try:
+            mreq = socket.inet_aton("239.255.255.250")
+            mreq += socket.inet_aton(self.iface or "0.0.0.0")
             s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
         except OSError:
-            # Some OSes accept the default interface
-            s.setsockopt(
-                socket.IPPROTO_IP,
-                socket.IP_ADD_MEMBERSHIP,
-                socket.inet_aton("239.255.255.250") + socket.inet_aton("0.0.0.0"),
-            )
+            pass
 
         # Send M-SEARCH for all ST types
         for st in SSDP_ST_TYPES:
@@ -191,7 +191,10 @@ class SsdpDiscovery:
                 f"MX: 2\r\n"
                 f"ST: {st}\r\n\r\n"
             ).encode()
-            s.sendto(query, SSDP_ADDR)
+            try:
+                s.sendto(query, SSDP_ADDR)
+            except OSError:
+                pass
 
         # Collect responses (NOTIFY alive + M-SEARCH 200 replies)
         s.settimeout(self.timeout)
@@ -228,10 +231,9 @@ class SsdpDiscovery:
         if not loc:
             return
 
-        # Only keep Hisense / DLNA renderer devices
-        nt_usn = f"{nt} {usn}"
-        if "MediaRenderer" not in nt_usn and "rootdevice" not in nt_usn \
-                and "upnp" not in nt_usn.lower():
+        # Fast pre-filter: ignore gateway / router UPnP services
+        nt_usn = f"{nt} {usn}".lower()
+        if any(bad in nt_usn for bad in ("internetgateway", "wandevice", "wanconnection", "lanhost")):
             return
 
         key = usn or loc
@@ -250,20 +252,42 @@ class SsdpDiscovery:
             host=loc_parsed.hostname or addr[0],
             port=loc_parsed.port or addr[1],
         )
-        # Try to fetch the device description for richer info
+
+        # Fetch device description and verify it is truly a Hisense TV
         try:
             devinfo = self._fetch_desc(loc)
-            if devinfo:
-                tv.name = devinfo.get("name", "Hisense TV")
-                tv.model = devinfo.get("model", "HiSmart")
-                tv.base_url = devinfo.get("base_url", "")
-                tv.udn = devinfo.get("udn") or tv.udn
-                if "HiSmart" not in (devinfo.get("model", "")) and "Hisense" not in (
-                    devinfo.get("name", "")
-                ) and "rendererdevicedesc" not in loc:
-                    return
-        except Exception:
-            pass
+            if not devinfo:
+                return
+
+            name = devinfo.get("name", "")
+            model = devinfo.get("model", "")
+            mfr = devinfo.get("manufacturer", "")
+            dtype = devinfo.get("device_type", "")
+
+            # Exclude non-TV devices (e.g. OpenWrt router, gateway, NAS)
+            low_type = dtype.lower()
+            if any(k in low_type for k in ("internetgatewaydevice", "wandevice", "wanconnectiondevice", "lanhostconfig")):
+                return
+            low_mfr = mfr.lower()
+            if any(k in low_mfr for k in ("openwrt", "asus", "netgear", "tp-link", "huawei", "cisco", "miniupnp")):
+                return
+
+            # Match Hisense TV signature
+            full_sig = f"{name} {model} {mfr} {loc}".lower()
+            is_hisense = "hisense" in full_sig or "hismart" in full_sig or "vidaa" in full_sig
+            is_media = "mediarenderer" in low_type or "tv" in full_sig or "电视" in full_sig or "rendererdevicedesc" in loc.lower()
+
+            if not (is_hisense and is_media):
+                return
+
+            tv.name = name or "Hisense TV"
+            tv.model = model or "HiSmart"
+            tv.base_url = devinfo.get("base_url") or tv.base_url
+            tv.udn = devinfo.get("udn") or tv.udn
+
+        except Exception as e:
+            _LOGGER.debug("Error inspecting UPnP device at %s: %s", loc, e)
+            return
 
         # Deduplicate: several USN NOTIFYs announce the same device
         dev_udn = (tv.udn or usn).split("::")[0]
@@ -273,27 +297,18 @@ class SsdpDiscovery:
             return
         results[dev_udn or key] = tv
 
-    def _fetch_desc(self, url: str, timeout: float = 3.0) -> dict[str, str] | None:
-        parsed = urlparse(url)
-        host = parsed.hostname or ""
-        port = parsed.port or 80
-        path = parsed.path or "/"
-        req = f"GET {path} HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n".encode()
-        with socket.create_connection((host, port), timeout=timeout) as s:
-            s.sendall(req)
-            s.settimeout(timeout)
-            data = b""
-            try:
-                while True:
-                    c = s.recv(4096)
-                    if not c:
-                        break
-                    data += c
-            except socket.timeout:
-                pass
-        text = data.decode("utf-8", "replace")
-        body = text.partition("\r\n\r\n")[2]
-        return self._parse_device_xml(body, host, port)
+    def _fetch_desc(self, url: str, timeout: float = 2.0) -> dict[str, str] | None:
+        try:
+            import urllib.request
+            req = urllib.request.Request(url, headers={"User-Agent": "HomeAssistant/Hisense"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                if resp.status == 200:
+                    body = resp.read().decode("utf-8", errors="replace")
+                    parsed = urlparse(url)
+                    return self._parse_device_xml(body, parsed.hostname or "", parsed.port or 80)
+        except Exception as e:
+            _LOGGER.debug("Failed to fetch UPnP desc from %s: %s", url, e)
+        return None
 
     def _parse_device_xml(self, xml_text: str, host: str, port: int) -> dict[str, str] | None:
         try:
@@ -301,18 +316,25 @@ class SsdpDiscovery:
         except ET.ParseError:
             return None
 
-        def txt(tag: str) -> str:
-            el = root.find(tag)
-            return (el.text or "").strip() if el is not None else ""
+        # Search elements recursively ignoring namespace and case
+        tags: dict[str, str] = {}
+        for el in root.iter():
+            tag_name = el.tag.split("}")[-1].lower()
+            if tag_name not in tags and el.text and el.text.strip():
+                tags[tag_name] = el.text.strip()
 
-        name = txt("friendlyName")
-        model = txt("modelName")
-        udn = txt("UDN")
-        base_el = root.find("URLBase")
-        base_url = base_el.text.strip() if base_el is not None else f"http://{host}:{port}"
+        name = tags.get("friendlyname", "")
+        model = tags.get("modelname", "")
+        manufacturer = tags.get("manufacturer", "")
+        device_type = tags.get("devicetype", "")
+        udn = tags.get("udn", "")
+        base_url = tags.get("urlbase") or f"http://{host}:{port}"
+
         return {
-            "name": name or "Hisense TV",
-            "model": model or "HiSmart",
+            "name": name,
+            "model": model,
+            "manufacturer": manufacturer,
+            "device_type": device_type,
             "udn": udn,
             "base_url": base_url,
         }
@@ -322,24 +344,41 @@ class SsdpDiscovery:
 class DlnaClient:
     """Async DLNA/UPnP control client for the Hisense TV."""
 
-    def __init__(self, host: str, port: int = DEFAULT_DLNA_PORT):
+    def __init__(self, host: str, port: int = DEFAULT_DLNA_PORT, session: ClientSession | None = None):
         self.host = host
         self.port = port
         self.base_url = f"http://{host}:{port}"
-        self.session: ClientSession | None = None
+        self.session: ClientSession | None = session
+        self._own_session: bool = session is None
         self._ctrl_urls: dict[str, str] = {}
         self._info: dict[str, str] = {}
         self._rc_port = DEFAULT_RC_PORT
 
+    async def test_connect(self, timeout: float = 2.0) -> bool:
+        """Quickly check if the TV is reachable via DLNA or key-remote port."""
+        loop = asyncio.get_running_loop()
+        for port in (self._rc_port, DEFAULT_DLNA_PORT, 7779, 7778):
+            def _check():
+                try:
+                    with socket.create_connection((self.host, port), timeout=timeout):
+                        return True
+                except (OSError, socket.timeout):
+                    return False
+            if await loop.run_in_executor(None, _check):
+                return True
+        return False
+
     async def connect(self) -> dict[str, str]:
         """Fetch device description, map control URLs, return device info."""
-        if self.session is None:
+        if self.session is None or self.session.closed:
             await self._open_session()
         return self._info
 
     async def _open_session(self) -> None:
         """Open the HTTP session and load the DLNA device description."""
-        self.session = ClientSession(timeout=ClientTimeout(total=5))
+        if self.session is None or self.session.closed:
+            self.session = ClientSession(timeout=ClientTimeout(total=5))
+            self._own_session = True
         try:
             # Fetch device description (absolute URL, no base_url join ambiguity)
             resp = await self.session.get(
@@ -354,8 +393,9 @@ class DlnaClient:
                 )
             text = await resp.text()
         except Exception:
-            await self.session.close()
-            self.session = None
+            if self._own_session and self.session:
+                await self.session.close()
+                self.session = None
             raise
 
         self._info = self._parse_desc(text)
@@ -366,7 +406,7 @@ class DlnaClient:
         )
 
     async def close(self) -> None:
-        if self.session:
+        if self.session and self._own_session and not self.session.closed:
             await self.session.close()
             self.session = None
 
@@ -494,10 +534,11 @@ class DlnaClient:
         """
         if not key.startswith("KEY_"):
             raise ValueError(f"not a remote key: {key}")
-        if self.session is None:
+        if self.session is None or self.session.closed:
             # The key service lives on another port and can be reachable
             # while DLNA is not, so do not require the device description.
             self.session = ClientSession(timeout=ClientTimeout(total=5))
+            self._own_session = True
 
         ports = [self._rc_port] + [
             p for p in RC_PORT_CANDIDATES if p != self._rc_port
