@@ -1,12 +1,28 @@
 {
   "config": {
     "step": {
+      "mode_select": {
+        "title": "Add Hisense Device",
+        "description": "Choose how to add your Hisense device: Add a TV via local network for direct control without login, or sign in to your Hisense AIHome account for all appliances.",
+        "menu_options": {
+          "lan_tv": "Add Hisense TV via LAN (Local Direct Control, No Login)",
+          "login": "Sign in with Hisense AIHome Account (AC/Fridge/Washer/TV)"
+        },
+        "menu_option_descriptions": {
+          "lan_tv": "Auto-discover or enter IP for local TV control without account, fast response and zero session conflict.",
+          "login": "Sign in with your Hisense AIHome credentials to manage all appliances including AC, Fridge, Washer, TV."
+        }
+      },
       "user": {
         "title": "Add Hisense Device",
         "description": "Choose how to add your Hisense device: Add a TV via local network for direct control without login, or sign in to your Hisense AIHome account for all appliances.",
         "menu_options": {
           "lan_tv": "Add Hisense TV via LAN (Local Direct Control, No Login)",
           "login": "Sign in with Hisense AIHome Account (AC/Fridge/Washer/TV)"
+        },
+        "menu_option_descriptions": {
+          "lan_tv": "Auto-discover or enter IP for local TV control without account, fast response and zero session conflict.",
+          "login": "Sign in with your Hisense AIHome credentials to manage all appliances including AC, Fridge, Washer, TV."
         }
       },
       "lan_tv": {

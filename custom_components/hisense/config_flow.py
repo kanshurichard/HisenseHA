@@ -42,9 +42,38 @@ class HisenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None):
         """Step 1: Choose mode."""
+        try:
+            from homeassistant.helpers.translation import async_invalidate_translations
+            async_invalidate_translations(self.hass, [DOMAIN])
+        except Exception:
+            pass
+        return await self.async_step_mode_select(user_input)
+
+    async def async_step_mode_select(self, user_input=None):
+        """Step 1: Select between LAN TV and Cloud account."""
+        is_zh = getattr(self.hass.config, "language", "en") in (
+            "zh",
+            "zh-Hans",
+            "zh-CN",
+            "zh-Hant",
+            "zh-HK",
+            "zh-TW",
+        )
+        menu_options = {
+            "lan_tv": (
+                "局域网添加海信电视（本地直连，无需登录）"
+                if is_zh
+                else "Add Hisense TV via LAN (Local Direct Control, No Login)"
+            ),
+            "login": (
+                "海信爱家云端账号登录（空调/冰箱/洗衣机/电视等全家电）"
+                if is_zh
+                else "Sign in with Hisense AIHome Account (AC/Fridge/Washer/TV)"
+            ),
+        }
         return self.async_show_menu(
-            step_id="user",
-            menu_options=["lan_tv", "login"],
+            step_id="mode_select",
+            menu_options=menu_options,
         )
 
     async def async_step_lan_tv(self, user_input=None):
