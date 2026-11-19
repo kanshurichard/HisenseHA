@@ -4,7 +4,7 @@
 [English](README.md)
 
 
-面向 **海信（Hisense）** 智能设备的 Home Assistant 自定义集成，使用云端 API，目前支持空调、洗衣机、干衣机和冰箱。
+面向 **海信（Hisense）** 智能设备的 Home Assistant 自定义集成，支持局域网免登录本地直连控制海信电视，并支持通过云端 API 与 MQTT 双向实时同步空调、冰箱、洗衣机、干衣机、热水器等全品类智能家电。
 
 
 

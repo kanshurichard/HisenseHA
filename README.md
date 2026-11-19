@@ -4,7 +4,7 @@
 
 [简体中文](README_zh-Hans.md)
 
-Home Assistant custom integration for **Hisense** smart devices. It uses cloud APIs and currently supports air conditioners, washing machines, dryers, refrigerators.
+Home Assistant custom integration for **Hisense** smart devices. Supports local LAN direct control for Hisense TVs without login, as well as cloud API & MQTT real-time push for AC, refrigerators, washing machines, dryers, water heaters, and more.
 
 ## Requirements
 
